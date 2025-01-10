@@ -327,16 +327,19 @@ pub async fn confirm_profile(
             .map_err(|err| ConfirmProfileError::SSHConfirm(command::CommandError::RunError(err)))?;
     }
 
-    let ssh_confirm_exit_status = ssh_confirm_child
-        .wait()
+    let ssh_confirm_exit_output = ssh_confirm_child
+        .wait_with_output()
         .await
         .map_err(|err| ConfirmProfileError::SSHConfirm(command::CommandError::RunError(err)))?;
 
-    match ssh_confirm_exit_status.code() {
+    match ssh_confirm_exit_output.status.code() {
         Some(0) => (),
-        a => {
+        _exit_code => {
             return Err(ConfirmProfileError::SSHConfirm(
-                command::CommandError::Exit(a, format!("{:?}", ssh_confirm_command)),
+                command::CommandError::Exit(
+                    ssh_confirm_exit_output,
+                    format!("{:?}", ssh_confirm_command),
+                ),
             ))
         }
     };
@@ -469,15 +472,18 @@ pub async fn deploy_profile(
         }
 
         let ssh_activate_exit_status = ssh_activate_child
-            .wait()
+            .wait_with_output()
             .await
             .map_err(|err| DeployProfileError::SSHActivate(command::CommandError::RunError(err)))?;
 
-        match ssh_activate_exit_status.code() {
+        match ssh_activate_exit_status.status.code() {
             Some(0) => (),
-            exit_code => {
+            _exit_code => {
                 return Err(DeployProfileError::SSHActivate(
-                    command::CommandError::Exit(exit_code, format!("{:?}", ssh_activate_command)),
+                    command::CommandError::Exit(
+                        ssh_activate_exit_status,
+                        format!("{:?}", ssh_activate_command),
+                    ),
                 ))
             }
         };
@@ -548,8 +554,11 @@ pub async fn deploy_profile(
                 )),
                 Ok(ref x) => match x.status.code() {
                     Some(0) => None,
-                    a => Some(DeployProfileError::SSHActivate(
-                        command::CommandError::Exit(a, format!("{:?}", ssh_activate_command)),
+                    _exit_code => Some(DeployProfileError::SSHActivate(
+                        command::CommandError::Exit(
+                            x.clone(),
+                            format!("{:?}", ssh_activate_command),
+                        ),
                     )),
                 },
             };
@@ -582,12 +591,13 @@ pub async fn deploy_profile(
         }
 
         tokio::select! {
-            x = ssh_wait_child.wait() => {
+            x = ssh_wait_child.wait_with_output() => {
                 debug!("Wait command ended");
-                match x.map_err(|err| DeployProfileError::SSHWait(command::CommandError::RunError(err)))?.code() {
+                let output = x.map_err(|err| DeployProfileError::SSHWait(command::CommandError::RunError(err)))?;
+                match output.status.code() {
                     Some(0) => (),
-                    a => return Err(DeployProfileError::SSHWait(
-                        command::CommandError::Exit(a, format!("{:?}", ssh_wait_command))
+                    _exit_code => return Err(DeployProfileError::SSHWait(
+                        command::CommandError::Exit(output, format!("{:?}", ssh_wait_command))
                     )),
                 };
             },
@@ -693,8 +703,8 @@ pub async fn revoke(
         )),
         Ok(ref x) => match x.status.code() {
             Some(0) => Ok(()),
-            a => Err(RevokeProfileError::SSHRevoke(command::CommandError::Exit(
-                a,
+            _exit_code => Err(RevokeProfileError::SSHRevoke(command::CommandError::Exit(
+                x.clone(),
                 format!("{:?}", ssh_activate_command),
             ))),
         },
