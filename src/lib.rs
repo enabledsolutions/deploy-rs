@@ -15,8 +15,7 @@ use flexi_logger::*;
 use std::path::{Path, PathBuf};
 
 pub fn make_lock_path(temp_path: &Path, closure: &str) -> PathBuf {
-    let lock_hash =
-        &closure["/nix/store/".len()..closure.find('-').unwrap_or_else(|| closure.len())];
+    let lock_hash = &closure["/nix/store/".len()..closure.find('-').unwrap_or(closure.len())];
     temp_path.join(format!("deploy-rs-canary-{}", lock_hash))
 }
 
@@ -208,17 +207,34 @@ fn parse_fragment(fragment: &str) -> Result<(Option<String>, Option<String>), Pa
             (TOKEN_DOT, true) => {
                 return Err(ParseFlakeError::PathTooLong);
             }
-            (NODE_IDENT, _) => Some(entry.into_node().unwrap().text().to_string()),
-            (TOKEN_IDENT, _) => Some(entry.into_token().unwrap().text().to_string()),
+            (NODE_IDENT, _) => Some(
+                entry
+                    .into_node()
+                    .ok_or(ParseFlakeError::Unrecognized)?
+                    .text()
+                    .to_string(),
+            ),
+            (TOKEN_IDENT, _) => Some(
+                entry
+                    .into_token()
+                    .ok_or(ParseFlakeError::Unrecognized)?
+                    .text()
+                    .to_string(),
+            ),
             (NODE_STRING, _) => {
                 let c = entry
                     .into_node()
-                    .unwrap()
+                    .ok_or(ParseFlakeError::Unrecognized)?
                     .children_with_tokens()
                     .nth(1)
-                    .unwrap();
+                    .ok_or(ParseFlakeError::Unrecognized)?;
 
-                Some(c.into_token().unwrap().text().to_string())
+                Some(
+                    c.into_token()
+                        .ok_or(ParseFlakeError::Unrecognized)?
+                        .text()
+                        .to_string(),
+                )
             }
             _ => return Err(ParseFlakeError::Unrecognized),
         };
@@ -327,7 +343,7 @@ pub fn parse_file<'a>(
     let (node, profile) = parse_fragment(attribute)?;
 
     Ok(DeployFlake {
-        repo: &file,
+        repo: file,
         node,
         profile,
     })
@@ -432,8 +448,9 @@ impl<'a> DeployData<'a> {
     }
 }
 
-pub fn make_deploy_data<'a, 's>(
-    top_settings: &'s data::GenericSettings,
+#[allow(clippy::too_many_arguments)]
+pub fn make_deploy_data<'a>(
+    top_settings: &data::GenericSettings,
     node: &'a data::Node,
     node_name: &'a str,
     profile: &'a data::Profile,
