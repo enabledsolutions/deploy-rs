@@ -15,8 +15,7 @@ use flexi_logger::*;
 use std::path::{Path, PathBuf};
 
 pub fn make_lock_path(temp_path: &Path, closure: &str) -> PathBuf {
-    let lock_hash =
-        &closure["/nix/store/".len()..closure.find('-').unwrap_or_else(|| closure.len())];
+    let lock_hash = &closure["/nix/store/".len()..closure.find('-').unwrap_or(closure.len())];
     temp_path.join(format!("deploy-rs-canary-{}", lock_hash))
 }
 
@@ -327,7 +326,7 @@ pub fn parse_file<'a>(
     let (node, profile) = parse_fragment(attribute)?;
 
     Ok(DeployFlake {
-        repo: &file,
+        repo: file,
         node,
         profile,
     })
@@ -432,8 +431,9 @@ impl<'a> DeployData<'a> {
     }
 }
 
-pub fn make_deploy_data<'a, 's>(
-    top_settings: &'s data::GenericSettings,
+#[allow(clippy::too_many_arguments)]
+pub fn make_deploy_data<'a>(
+    top_settings: &data::GenericSettings,
     node: &'a data::Node,
     node_name: &'a str,
     profile: &'a data::Profile,

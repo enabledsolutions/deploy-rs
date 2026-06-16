@@ -184,6 +184,33 @@
 
         checks = {
           deploy-rs = self.packages.${system}.default.overrideAttrs (super: { doCheck = true; });
+
+          # Lint the Rust sources with clippy, failing on any warning.
+          clippy = self.packages.${system}.default.overrideAttrs (super: {
+            pname = "deploy-rs-clippy";
+            nativeBuildInputs = (super.nativeBuildInputs or [ ]) ++ [ pkgs.clippy ];
+            buildPhase = "cargo clippy --all-targets -- --deny warnings";
+            doCheck = false;
+            installPhase = "touch $out";
+          });
+
+          # Enforce `cargo fmt` formatting.
+          rustfmt = pkgs.runCommandLocal "deploy-rs-rustfmt" {
+            nativeBuildInputs = [ pkgs.cargo pkgs.rustfmt ];
+          } ''
+            export HOME="$TMPDIR"
+            cd ${self.packages.${system}.default.src}
+            cargo fmt --check
+            touch $out
+          '';
+
+          # Enforce REUSE licensing compliance.
+          reuse = pkgs.runCommandLocal "deploy-rs-reuse" {
+            nativeBuildInputs = [ pkgs.reuse ];
+          } ''
+            reuse --root ${self} lint
+            touch $out
+          '';
         } // (pkgs.lib.optionalAttrs (pkgs.lib.elem system ["x86_64-linux"]) (import ./nix/tests {
           inherit inputs pkgs;
         }));
